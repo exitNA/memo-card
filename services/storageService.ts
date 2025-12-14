@@ -1,22 +1,66 @@
 import { WordCardData, UserStats, WordStatus } from '../types';
+import { API_BASE_URL } from '../constants';
 
 const WORDS_KEY = 'memocurve_words';
 const STATS_KEY = 'memocurve_stats';
 
-export const getWords = (): WordCardData[] => {
+// --- Local Storage Helpers (Offline Fallback) ---
+const getLocalWords = (): WordCardData[] => {
   try {
     const data = localStorage.getItem(WORDS_KEY);
     return data ? JSON.parse(data) : [];
   } catch (e) {
-    console.error("Failed to load words", e);
     return [];
   }
 };
 
-export const saveWords = (words: WordCardData[]) => {
+const saveLocalWords = (words: WordCardData[]) => {
   localStorage.setItem(WORDS_KEY, JSON.stringify(words));
 };
 
+// --- API Helpers ---
+const fetchWordsFromApi = async (): Promise<WordCardData[]> => {
+  const response = await fetch(`${API_BASE_URL}/words`);
+  if (!response.ok) throw new Error('API Sync Failed');
+  return response.json();
+};
+
+const syncWordsToApi = async (words: WordCardData[]) => {
+  await fetch(`${API_BASE_URL}/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(words)
+  });
+};
+
+// --- Main Service Methods ---
+
+export const getWords = async (): Promise<WordCardData[]> => {
+  try {
+    // Try to fetch from backend first
+    const remoteWords = await fetchWordsFromApi();
+    // Update local cache
+    saveLocalWords(remoteWords);
+    return remoteWords;
+  } catch (e) {
+    console.warn("Backend unavailable, using local storage", e);
+    return getLocalWords();
+  }
+};
+
+// Note: In a real app, this should be synchronous for the UI and async for the backend.
+// We'll update local immediately and try to sync to backend in background.
+export const saveWords = (words: WordCardData[]) => {
+  // 1. Save Local (Optimistic UI)
+  saveLocalWords(words);
+  
+  // 2. Sync Remote (Fire and forget, or handle error silently)
+  syncWordsToApi(words).catch(e => {
+    console.warn("Failed to sync to backend", e);
+  });
+};
+
+// Stats remain local for this demo, or could be moved to backend similarly
 export const getStats = (): UserStats => {
   const defaultStats: UserStats = {
     streak: 0,
@@ -83,7 +127,6 @@ export const checkIn = (): UserStats => {
 export const getDueWords = (words: WordCardData[]): WordCardData[] => {
   const now = Date.now();
   return words.filter(w => {
-    // New words or words where nextReviewDate is passed
     if (w.status === WordStatus.MASTERED) return false;
     return w.nextReviewDate <= now;
   }).sort((a, b) => a.nextReviewDate - b.nextReviewDate);

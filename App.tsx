@@ -8,7 +8,7 @@ import { INTERVALS_MS, EBBINGHAUS_INTERVALS_DAYS } from './constants';
 
 import Dashboard from './components/Dashboard';
 import WordCard from './components/WordCard';
-import { X, Search, Loader2, ArrowLeft, Trash2, CheckCircle } from 'lucide-react';
+import { X, Search, Loader2, ArrowLeft, Trash2, CheckCircle, WifiOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
@@ -20,13 +20,22 @@ const App: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [sessionCompleted, setSessionCompleted] = useState(false);
   const [isPracticeMode, setIsPracticeMode] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initial Load
-    const loadedWords = getWords();
-    const currentStats = checkIn();
-    setWords(loadedWords);
-    setStats(currentStats);
+    const initData = async () => {
+        try {
+            const loadedWords = await getWords();
+            setWords(loadedWords);
+            const currentStats = checkIn();
+            setStats(currentStats);
+        } catch (e) {
+            console.error("Initialization failed", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+    initData();
   }, []);
 
   const handleStartReview = () => {
@@ -61,50 +70,28 @@ const App: React.FC = () => {
     let nextDate = currentCard.nextReviewDate;
     let newStatus = currentCard.status;
 
-    // --- LOGIC DISTINCTION ---
     if (isPracticeMode) {
-        // Practice Mode: Only "Forgot" resets the word. Others do nothing to schedule.
         if (rating === 'forgot') {
             newLevel = 1;
-            nextDate = Date.now(); // Make it due immediately so it enters normal review cycle
+            nextDate = Date.now(); 
             newStatus = WordStatus.LEARNING;
         }
-        // If Easy/Good/Hard in practice, we just reinforce without changing schedule 
-        // to avoid messing up the curve.
     } else {
-        // Normal Review Mode
         switch (rating) {
-            case 'easy':
-                newLevel = Math.min(currentCard.level + 2, 7);
-                break;
-            case 'good':
-                newLevel = Math.min(currentCard.level + 1, 7);
-                break;
-            case 'hard':
-                newLevel = Math.max(currentCard.level, 0); 
-                break;
-            case 'forgot':
-                newLevel = 1; 
-                break;
+            case 'easy': newLevel = Math.min(currentCard.level + 2, 7); break;
+            case 'good': newLevel = Math.min(currentCard.level + 1, 7); break;
+            case 'hard': newLevel = Math.max(currentCard.level, 0); break;
+            case 'forgot': newLevel = 1; break;
         }
-
-        if (newLevel >= 7) {
-            newStatus = WordStatus.MASTERED;
-        } else {
-            newStatus = WordStatus.LEARNING;
-        }
-
+        newStatus = newLevel >= 7 ? WordStatus.MASTERED : WordStatus.LEARNING;
         const daysToAdd = EBBINGHAUS_INTERVALS_DAYS[Math.min(newLevel, 6)];
         nextDate = Date.now() + (daysToAdd * 24 * 60 * 60 * 1000);
     }
 
-    // --- UPDATE STATS (Both Modes Count for Activity) ---
+    // --- UPDATE STATS ---
     const updatedStats = { ...stats };
     updatedStats.wordsToday += 1;
-    // only increment total learned if it's a real review or first time? 
-    // Simplified: Just increment total count for activity.
     
-    // Update daily history curve data
     const today = new Date().toISOString().split('T')[0];
     if (!updatedStats.history) updatedStats.history = [];
     const todayIndex = updatedStats.history.findIndex(h => h.date === today);
@@ -124,7 +111,7 @@ const App: React.FC = () => {
           ...w,
           level: newLevel,
           status: newStatus,
-          lastReviewDate: Date.now(), // Always update last review time
+          lastReviewDate: Date.now(), 
           nextReviewDate: nextDate,
           reviewCount: w.reviewCount + 1
         };
@@ -133,7 +120,7 @@ const App: React.FC = () => {
     });
 
     setWords(updatedWords);
-    saveWords(updatedWords);
+    saveWords(updatedWords); // Syncs to backend in background
 
     // --- NEXT CARD ---
     if (currentCardIndex < sessionQueue.length - 1) {
@@ -165,9 +152,9 @@ const App: React.FC = () => {
       saveWords(updatedWords);
       setNewWordInput('');
       setView(AppView.DASHBOARD); 
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("AI 无法生成该单词详情，请检查拼写或稍后重试。");
+      alert(`生成失败: ${e.message || "请检查后端服务是否运行"}`);
     } finally {
       setIsAdding(false);
     }
@@ -182,6 +169,14 @@ const App: React.FC = () => {
   }
 
   // --- RENDER HELPERS ---
+
+  if (loading) {
+      return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50">
+              <Loader2 className="animate-spin text-primary-500" size={48} />
+          </div>
+      );
+  }
 
   const renderAddWord = () => (
     <div className="max-w-md mx-auto p-6 bg-white rounded-2xl shadow-lg mt-10">
@@ -214,10 +209,10 @@ const App: React.FC = () => {
             disabled={isAdding || !newWordInput}
             className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
         >
-            {isAdding ? 'AI 正在分析...' : '生成记忆卡片'}
+            {isAdding ? '正在请求后端 AI...' : '生成记忆卡片'}
         </button>
         <p className="text-xs text-gray-400 text-center mt-2">
-            AI 助手将自动生成拼写、音标、释义和例句。
+            需要 Python 后端运行以支持 AI 生成。
         </p>
       </div>
     </div>
@@ -291,18 +286,39 @@ const App: React.FC = () => {
                   <div className="text-center py-12 text-gray-400">还没有添加单词。</div>
               ) : (
                   words.map(word => (
-                      <div key={word.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center group">
-                          <div>
-                              <h3 className="font-bold text-lg text-gray-800">{word.word}</h3>
-                              <div className="flex gap-2 text-xs mt-1">
-                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">Level {word.level}</span>
-                                  <span className={`px-2 py-0.5 rounded ${word.status === WordStatus.MASTERED ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                      <div key={word.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center group hover:shadow-md transition-shadow">
+                          <div className="flex-1 min-w-0 pr-4">
+                              <div className="flex items-baseline gap-2 mb-1">
+                                  <h3 className="font-bold text-lg text-gray-800">{word.word}</h3>
+                                  {word.details?.ipa && (
+                                    <span className="text-xs text-gray-500 font-mono bg-gray-50 px-1.5 py-0.5 rounded">
+                                      /{word.details.ipa.us}/
+                                    </span>
+                                  )}
+                              </div>
+                              
+                              {word.details?.definitions && word.details.definitions.length > 0 && (
+                                <div className="mb-2">
+                                   <p className="text-sm text-gray-700 truncate">
+                                     <span className="text-xs font-bold text-blue-600 bg-blue-50 px-1 py-0.5 rounded mr-2 italic">
+                                        {word.details.definitions[0].pos}
+                                     </span>
+                                     {word.details.definitions[0].meaning}
+                                   </p>
+                                </div>
+                              )}
+
+                              <div className="flex flex-wrap gap-2 text-xs items-center text-gray-500">
+                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-medium">Level {word.level}</span>
+                                  <span className={`px-2 py-0.5 rounded font-medium ${word.status === WordStatus.MASTERED ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                                       {word.status}
                                   </span>
-                                  <span className="text-gray-400 ml-2">下次复习: {new Date(word.nextReviewDate).toLocaleDateString()}</span>
+                                  <span className="ml-auto sm:ml-0 border-l pl-2 border-gray-200">
+                                    下次: {new Date(word.nextReviewDate).toLocaleDateString()}
+                                  </span>
                               </div>
                           </div>
-                          <button onClick={() => handleDeleteWord(word.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                          <button onClick={() => handleDeleteWord(word.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0">
                               <Trash2 size={18} />
                           </button>
                       </div>

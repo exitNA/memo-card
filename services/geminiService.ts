@@ -1,103 +1,61 @@
-import { GoogleGenAI, Type, Modality } from '@google/genai';
-import { GEMINI_TEXT_MODEL, GEMINI_TTS_MODEL } from '../constants';
+import { GoogleGenAI, Modality } from '@google/genai';
+import { GEMINI_TTS_MODEL, API_BASE_URL } from '../constants';
 import { WordDetails } from '../types';
 
+// Keep the client-side TTS for now as it's efficient, 
+// or move to backend if strictly required (but not requested explicitly).
 const getClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateWordDetails = async (word: string): Promise<WordDetails> => {
-  const ai = getClient();
-  
-  const prompt = `
-    Generate a detailed vocabulary card for the English word "${word}".
-    Target audience: Chinese speakers (Mainland China) learning English.
-    Return strictly JSON.
-    
-    Requirements:
-    1. **spelling**: Correct spelling (lowercase).
-    2. **ipa**: IPA symbols for US and UK pronunciation.
-    3. **definitions**: Array of meanings for DIFFERENT parts of speech (POS). Include the English meaning and a concise Simplified Chinese translation.
-    4. **sentences**: 3 very common, natural sentences. Prioritize fixed collocations, authentic slang (俚语), and popular pairings. Include Simplified Chinese translation.
-    5. **collocations**: List of 3-5 distinct short phrases/idioms/fixed matches using this word.
-    6. **etymology**: Brief origin/root explanation in Simplified Chinese (if helpful for memory) or English.
-  `;
+  try {
+    // Call the FastAPI backend
+    const response = await fetch(`${API_BASE_URL}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word })
+    });
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_TEXT_MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          spelling: { type: Type.STRING },
-          ipa: {
-            type: Type.OBJECT,
-            properties: {
-              us: { type: Type.STRING },
-              uk: { type: Type.STRING }
-            }
-          },
-          definitions: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                pos: { type: Type.STRING },
-                meaning: { type: Type.STRING },
-                translation: { type: Type.STRING }
-              }
-            }
-          },
-          sentences: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                en: { type: Type.STRING },
-                cn: { type: Type.STRING }
-              }
-            }
-          },
-          collocations: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          },
-          etymology: { type: Type.STRING }
-        }
-      }
+    if (!response.ok) {
+        throw new Error(`Backend API Error: ${response.statusText}`);
     }
-  });
 
-  if (response.text) {
-    return JSON.parse(response.text) as WordDetails;
+    const data = await response.json();
+    return data as WordDetails;
+
+  } catch (e) {
+    console.error("Backend generation failed:", e);
+    // Optional: Fallback to client-side generation if you wanted to keep it,
+    // but the request is to use the backend/OpenAI-compatible models.
+    throw new Error("无法连接到后端服务生成单词，请确保 server.py 正在运行。");
   }
-  throw new Error("Failed to generate word details");
 };
 
 export const generatePronunciation = async (text: string, voiceName: 'Kore' | 'Puck' | 'Fenrir' | 'Charon' | 'Zephyr' = 'Kore'): Promise<string> => {
   const ai = getClient();
   
-  // 'Kore' is typically female/neutral, 'Puck' is typically male-sounding.
-  // Gemini TTS voices: Puck, Charon, Kore, Fenrir, Zephyr.
-  
-  const response = await ai.models.generateContent({
-    model: GEMINI_TTS_MODEL,
-    contents: {
-      parts: [{ text: text }] // Just read the text
-    },
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName }
+  try {
+    const response = await ai.models.generateContent({
+        model: GEMINI_TTS_MODEL,
+        contents: {
+        parts: [{ text: text }] // Just read the text
+        },
+        config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+            voiceConfig: {
+            prebuiltVoiceConfig: { voiceName }
+            }
         }
-      }
-    }
-  });
+        }
+    });
 
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) {
-    throw new Error("No audio data returned");
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) {
+        throw new Error("No audio data returned");
+    }
+    return base64Audio;
+  } catch (e) {
+      console.error("TTS Generation failed", e);
+      throw e;
   }
-  return base64Audio;
 };

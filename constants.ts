@@ -1,3 +1,4 @@
+
 // Ebbinghaus Intervals in Minutes
 // Level 0: New
 // Level 1: 1 day (1440 min)
@@ -15,3 +16,6 @@ export const INTERVALS_MS = EBBINGHAUS_INTERVALS_DAYS.map(days => days * 24 * 60
 
 export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 export const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+
+// Backend Configuration
+export const API_BASE_URL = 'http://localhost:8000/api';
