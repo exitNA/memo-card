@@ -1,3 +1,4 @@
+
 export enum WordStatus {
   NEW = 'NEW',
   LEARNING = 'LEARNING',
@@ -15,9 +16,17 @@ export interface WordDefinition {
   translation: string; // Chinese translation usually helpful for memory
 }
 
+export type HighlightType = 'collocation' | 'idiom' | 'slang';
+
+export interface SentenceHighlight {
+  text: string;
+  type: HighlightType;
+}
+
 export interface ExampleSentence {
   en: string;
   cn: string;
+  highlights?: SentenceHighlight[];
 }
 
 export interface WordDetails {

@@ -1,14 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   getWords, saveWords, getDueWords, checkIn, saveStats 
 } from './services/storageService';
 import { generateWordDetails } from './services/geminiService';
 import { WordCardData, WordStatus, AppView, UserStats } from './types';
-import { INTERVALS_MS, EBBINGHAUS_INTERVALS_DAYS } from './constants';
+import { EBBINGHAUS_INTERVALS_DAYS } from './constants';
 
 import Dashboard from './components/Dashboard';
 import WordCard from './components/WordCard';
-import { X, Search, Loader2, ArrowLeft, Trash2, CheckCircle, WifiOff } from 'lucide-react';
+import { X, Search, Loader2, ArrowLeft, Trash2, CheckCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
@@ -53,9 +54,8 @@ const App: React.FC = () => {
         alert("请先添加一些单词！");
         return;
     }
-    // Shuffle and pick top 20 for practice
     const shuffled = [...words].sort(() => 0.5 - Math.random());
-    const practiceSet = shuffled.slice(0, 20);
+    const practiceSet = shuffled.slice(0, 15);
     
     setSessionQueue(practiceSet);
     setCurrentCardIndex(0);
@@ -72,7 +72,7 @@ const App: React.FC = () => {
 
     if (isPracticeMode) {
         if (rating === 'forgot') {
-            newLevel = 1;
+            newLevel = Math.max(0, currentCard.level - 1);
             nextDate = Date.now(); 
             newStatus = WordStatus.LEARNING;
         }
@@ -81,14 +81,13 @@ const App: React.FC = () => {
             case 'easy': newLevel = Math.min(currentCard.level + 2, 7); break;
             case 'good': newLevel = Math.min(currentCard.level + 1, 7); break;
             case 'hard': newLevel = Math.max(currentCard.level, 0); break;
-            case 'forgot': newLevel = 1; break;
+            case 'forgot': newLevel = 0; break;
         }
         newStatus = newLevel >= 7 ? WordStatus.MASTERED : WordStatus.LEARNING;
         const daysToAdd = EBBINGHAUS_INTERVALS_DAYS[Math.min(newLevel, 6)];
         nextDate = Date.now() + (daysToAdd * 24 * 60 * 60 * 1000);
     }
 
-    // --- UPDATE STATS ---
     const updatedStats = { ...stats };
     updatedStats.wordsToday += 1;
     
@@ -98,13 +97,12 @@ const App: React.FC = () => {
     if (todayIndex >= 0) {
         updatedStats.history[todayIndex].count = updatedStats.wordsToday;
     } else {
-        updatedStats.history.push({ date: today, count: 1 });
+        updatedStats.history.push({ date: today, count: updatedStats.wordsToday });
     }
 
     setStats(updatedStats);
     saveStats(updatedStats);
 
-    // --- UPDATE WORD ---
     const updatedWords = words.map(w => {
       if (w.id === currentCard.id) {
         return {
@@ -120,9 +118,8 @@ const App: React.FC = () => {
     });
 
     setWords(updatedWords);
-    saveWords(updatedWords); // Syncs to backend in background
+    saveWords(updatedWords);
 
-    // --- NEXT CARD ---
     if (currentCardIndex < sessionQueue.length - 1) {
       setCurrentCardIndex(prev => prev + 1);
     } else {
@@ -154,7 +151,7 @@ const App: React.FC = () => {
       setView(AppView.DASHBOARD); 
     } catch (e: any) {
       console.error(e);
-      alert(`生成失败: ${e.message || "请检查后端服务是否运行"}`);
+      alert(`生成失败: ${e.message}\n请检查 API Key 配置。`);
     } finally {
       setIsAdding(false);
     }
@@ -168,72 +165,71 @@ const App: React.FC = () => {
       }
   }
 
-  // --- RENDER HELPERS ---
-
   if (loading) {
       return (
           <div className="min-h-screen flex items-center justify-center bg-slate-50">
-              <Loader2 className="animate-spin text-primary-500" size={48} />
+              <div className="text-center space-y-4">
+                  <Loader2 className="animate-spin text-primary-500 mx-auto" size={48} />
+                  <p className="text-gray-400 font-medium">正在加载您的单词库...</p>
+              </div>
           </div>
       );
   }
 
   const renderAddWord = () => (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-2xl shadow-lg mt-10">
+    <div className="max-w-md mx-auto p-6 bg-white rounded-2xl shadow-xl mt-10 border border-gray-100 animate-fade-in">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold">添加新单词</h2>
-        <button onClick={() => setView(AppView.DASHBOARD)} className="text-gray-400 hover:text-gray-600">
-            <X size={24} />
+        <h2 className="text-xl font-bold text-gray-800">添加新单词</h2>
+        <button onClick={() => setView(AppView.DASHBOARD)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 transition-colors">
+            <X size={20} />
         </button>
       </div>
       <div className="space-y-4">
         <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">输入想要记忆的单词</label>
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Word to remember</label>
             <div className="relative">
                 <input 
                     type="text" 
+                    autoFocus
                     value={newWordInput}
                     onChange={(e) => setNewWordInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddWord()}
-                    className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:bg-white focus:border-transparent outline-none transition-all"
                     placeholder="例如: serendipity"
                     disabled={isAdding}
                 />
-                <div className="absolute right-3 top-3 text-gray-400">
-                    {isAdding ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
+                <div className="absolute right-3 top-3.5 text-gray-300">
+                    {isAdding ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
                 </div>
             </div>
         </div>
         <button 
             onClick={handleAddWord}
             disabled={isAdding || !newWordInput}
-            className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-primary-200 transition-all flex items-center justify-center gap-2 active:scale-95"
         >
-            {isAdding ? '正在请求后端 AI...' : '生成记忆卡片'}
+            {isAdding ? '正在调用 Gemini AI...' : '生成智能记忆卡'}
         </button>
-        <p className="text-xs text-gray-400 text-center mt-2">
-            需要 Python 后端运行以支持 AI 生成。
-        </p>
       </div>
     </div>
   );
 
   const renderSessionCompleted = () => (
-    <div className="max-w-md mx-auto p-8 text-center mt-10">
-        <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle size={48} />
+    <div className="max-w-md mx-auto p-12 text-center mt-10 bg-white rounded-3xl shadow-xl border border-gray-50 animate-fade-in">
+        <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <CheckCircle size={40} />
         </div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">本次练习完成！</h2>
-        <p className="text-gray-600 mb-8">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">太棒了！</h2>
+        <p className="text-gray-500 mb-8 leading-relaxed">
             {isPracticeMode 
-                ? '自主练习有助于加深记忆印记。' 
-                : `你今天复习了 ${sessionQueue.length} 个单词，保持状态！`}
+                ? '自主练习已圆满结束，这让你的记忆更加牢固。' 
+                : `今日复习任务全部达成！你已经巩固了 ${sessionQueue.length} 个单词。`}
         </p>
         <button 
             onClick={() => setView(AppView.DASHBOARD)}
-            className="px-8 py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 transition-colors"
+            className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-colors shadow-lg"
         >
-            返回主页
+            返回仪表盘
         </button>
     </div>
   );
@@ -245,19 +241,19 @@ const App: React.FC = () => {
     const progress = ((currentCardIndex) / sessionQueue.length) * 100;
 
     return (
-        <div className="max-w-2xl mx-auto p-4 flex flex-col h-screen sm:h-auto">
-            <div className="flex items-center justify-between mb-6">
-                <button onClick={() => setView(AppView.DASHBOARD)} className="p-2 hover:bg-gray-100 rounded-full">
-                    <ArrowLeft size={24} className="text-gray-600" />
+        <div className="max-w-2xl mx-auto p-4 flex flex-col h-screen sm:h-auto animate-fade-in">
+            <div className="flex items-center justify-between mb-8">
+                <button onClick={() => setView(AppView.DASHBOARD)} className="p-2 hover:bg-white hover:shadow-sm rounded-full transition-all">
+                    <ArrowLeft size={20} className="text-gray-600" />
                 </button>
-                <div className="flex-1 mx-4">
-                     <div className="flex justify-between text-xs text-gray-400 mb-1">
-                        <span>{isPracticeMode ? '自主练习模式' : '每日复习模式'}</span>
+                <div className="flex-1 mx-6">
+                     <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
+                        <span>{isPracticeMode ? 'Practice Mode' : 'Ebbinghaus Cycle'}</span>
                         <span>{currentCardIndex + 1} / {sessionQueue.length}</span>
                     </div>
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                         <div 
-                            className={`h-full transition-all duration-300 ease-out ${isPracticeMode ? 'bg-purple-500' : 'bg-primary-500'}`}
+                            className={`h-full transition-all duration-500 ease-out ${isPracticeMode ? 'bg-purple-500' : 'bg-primary-500'}`}
                             style={{ width: `${progress}%` }}
                         />
                     </div>
@@ -273,34 +269,37 @@ const App: React.FC = () => {
   };
 
   const renderWordList = () => (
-      <div className="max-w-3xl mx-auto p-4 sm:p-6">
-          <div className="flex items-center gap-4 mb-6">
-              <button onClick={() => setView(AppView.DASHBOARD)} className="p-2 hover:bg-gray-100 rounded-full">
-                <ArrowLeft size={24} />
+      <div className="max-w-3xl mx-auto p-4 sm:p-6 animate-fade-in">
+          <div className="flex items-center gap-4 mb-8">
+              <button onClick={() => setView(AppView.DASHBOARD)} className="p-2 hover:bg-white hover:shadow-sm rounded-full transition-all">
+                <ArrowLeft size={20} />
               </button>
-              <h2 className="text-2xl font-bold">我的生词本 ({words.length})</h2>
+              <h2 className="text-2xl font-bold text-gray-800">我的生词本 <span className="text-primary-500 text-sm font-medium">({words.length})</span></h2>
           </div>
           
-          <div className="grid gap-3">
+          <div className="grid gap-4">
               {words.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400">还没有添加单词。</div>
+                  <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-gray-100">
+                      <p className="text-gray-400">目前还没有添加任何单词。</p>
+                      <button onClick={() => setView(AppView.ADD_WORD)} className="mt-4 text-primary-600 font-bold hover:underline">去添加第一个单词 &rarr;</button>
+                  </div>
               ) : (
                   words.map(word => (
-                      <div key={word.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center group hover:shadow-md transition-shadow">
+                      <div key={word.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center group hover:shadow-md transition-all hover:-translate-y-0.5">
                           <div className="flex-1 min-w-0 pr-4">
-                              <div className="flex items-baseline gap-2 mb-1">
+                              <div className="flex items-center gap-3 mb-1.5">
                                   <h3 className="font-bold text-lg text-gray-800">{word.word}</h3>
                                   {word.details?.ipa && (
-                                    <span className="text-xs text-gray-500 font-mono bg-gray-50 px-1.5 py-0.5 rounded">
+                                    <span className="text-[10px] text-gray-400 font-mono bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
                                       /{word.details.ipa.us}/
                                     </span>
                                   )}
                               </div>
                               
                               {word.details?.definitions && word.details.definitions.length > 0 && (
-                                <div className="mb-2">
-                                   <p className="text-sm text-gray-700 truncate">
-                                     <span className="text-xs font-bold text-blue-600 bg-blue-50 px-1 py-0.5 rounded mr-2 italic">
+                                <div className="mb-3">
+                                   <p className="text-xs text-gray-600 truncate">
+                                     <span className="text-[10px] font-black text-primary-500 uppercase bg-primary-50 px-1.5 py-0.5 rounded-md mr-2 italic">
                                         {word.details.definitions[0].pos}
                                      </span>
                                      {word.details.definitions[0].meaning}
@@ -308,17 +307,17 @@ const App: React.FC = () => {
                                 </div>
                               )}
 
-                              <div className="flex flex-wrap gap-2 text-xs items-center text-gray-500">
-                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-medium">Level {word.level}</span>
-                                  <span className={`px-2 py-0.5 rounded font-medium ${word.status === WordStatus.MASTERED ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                              <div className="flex flex-wrap gap-3 text-[10px] items-center text-gray-400">
+                                  <span className="bg-gray-50 text-gray-500 font-bold px-2 py-0.5 rounded border border-gray-100">Lv.{word.level}</span>
+                                  <span className={`px-2 py-0.5 rounded font-bold ${word.status === WordStatus.MASTERED ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
                                       {word.status}
                                   </span>
-                                  <span className="ml-auto sm:ml-0 border-l pl-2 border-gray-200">
-                                    下次: {new Date(word.nextReviewDate).toLocaleDateString()}
+                                  <span className="flex items-center gap-1">
+                                    下次复习: {new Date(word.nextReviewDate).toLocaleDateString()}
                                   </span>
                               </div>
                           </div>
-                          <button onClick={() => handleDeleteWord(word.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0">
+                          <button onClick={() => handleDeleteWord(word.id)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all flex-shrink-0">
                               <Trash2 size={18} />
                           </button>
                       </div>
@@ -329,7 +328,7 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900 font-sans">
+    <div className="min-h-screen bg-slate-50 text-gray-900 font-sans selection:bg-primary-100">
       {view === AppView.DASHBOARD && (
         <Dashboard 
           stats={stats}
