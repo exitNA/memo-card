@@ -1,5 +1,5 @@
 {
-  "name": "记忆卡片",
+  "name": "vibeMemo",
   "description": "基于艾宾浩斯遗忘曲线的智能背单词应用。AI生成详细词义、地道例句、词根词源，支持美式/英式发音。",
   "requestFramePermissions": []
 }

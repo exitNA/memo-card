@@ -1,7 +1,8 @@
 
-import { GoogleGenAI, Modality, Type } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { GEMINI_TEXT_MODEL, GEMINI_TTS_MODEL } from '../constants';
 import { WordDetails } from '../types';
+import { WORD_ANALYSIS_SYSTEM_PROMPT } from '../prompts';
 
 // 始终从环境变量获取 API 密钥
 const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -12,92 +13,20 @@ const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 export const generateWordDetails = async (word: string): Promise<WordDetails> => {
   const ai = getAiClient();
   
-  const systemInstruction = `You are a world-class English lexicographer and language teacher. 
-  Create a detailed word study card for the given word. 
-  
-  CRITICAL RULE FOR HIGHLIGHTS:
-  In example sentences, you MUST identify common collocations, idioms, or phrasal structures.
-  If a structure is discontinuous (meaning other words appear in the middle), use '...' to represent the gap in the 'text' field.
-  
-  EXAMPLES of 'text' field for highlights:
-  - Sentence: "It is too hard to study tonight." -> Highlight text: "too...to"
-  - Sentence: "I usually go swimming on weekends." -> Highlight text: "on weekends"
-  - Sentence: "Please take my feelings into account." -> Highlight text: "take...into account"
-  - Sentence: "They are so busy that they cannot come." -> Highlight text: "so...that"
-  
-  MANDATORY: When generating sentences for words like 'too', 'weekends', 'so', etc., ensure you include these specific structures as examples.
-  
-  Types:
-  - 'collocation': natural word combinations.
-  - 'idiom': non-literal expressions.
-  - 'slang': informal language.
-  
-  Return the result in strictly valid JSON format.`;
-
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_TEXT_MODEL,
-      contents: `Generate study details for the English word: "${word}". Please prioritize sentences that include common collocations or discontinuous structures (like 'too...to' if 'too' is the word, or 'on weekends' if 'weekends' is the word).`,
+      contents: `Analyze the English word: "${word}". If "${word}" is an inflected form (e.g., plural, past tense, comparative), convert it to its LEMMA (base form) and generate details for the base form. Ensure the 'spelling' field matches the base form. Please prioritize sentences that include common collocations or discontinuous structures. Don't forget morphological variations.`,
       config: {
-        systemInstruction,
+        systemInstruction: WORD_ANALYSIS_SYSTEM_PROMPT,
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            spelling: { type: Type.STRING },
-            ipa: {
-              type: Type.OBJECT,
-              properties: {
-                us: { type: Type.STRING },
-                uk: { type: Type.STRING }
-              },
-              required: ["us", "uk"]
-            },
-            definitions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  pos: { type: Type.STRING, description: "Part of speech" },
-                  meaning: { type: Type.STRING, description: "Clear English definition" },
-                  translation: { type: Type.STRING, description: "Chinese translation" }
-                },
-                required: ["pos", "meaning", "translation"]
-              }
-            },
-            sentences: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  en: { type: Type.STRING, description: "Natural example sentence" },
-                  cn: { type: Type.STRING, description: "Chinese translation" },
-                  highlights: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        text: { type: Type.STRING, description: "The phrase to highlight. Use '...' for gaps." },
-                        type: { type: Type.STRING, enum: ["collocation", "idiom", "slang"] }
-                      },
-                      required: ["text", "type"]
-                    }
-                  }
-                },
-                required: ["en", "cn"]
-              }
-            },
-            collocations: { type: Type.ARRAY, items: { type: Type.STRING } },
-            etymology: { type: Type.STRING, description: "Brief interesting origin story" }
-          },
-          required: ["spelling", "ipa", "definitions", "sentences", "collocations"]
-        }
       }
     });
 
     let text = response.text;
     if (!text) throw new Error("AI returned empty response");
     
+    // Clean up markdown code blocks if present (common when using prompts for JSON)
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       text = jsonMatch[0];

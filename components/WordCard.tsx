@@ -2,14 +2,15 @@
 import React, { useState } from 'react';
 import { WordCardData, WordStatus, SentenceHighlight, HighlightType } from '../types';
 import { generatePronunciation } from '../services/geminiService';
-import { Volume2, BookOpen, Clock, Zap, Book, RotateCcw } from 'lucide-react';
+import { Volume2, BookOpen, Clock, Zap, Book, RotateCcw, GitMerge } from 'lucide-react';
 
 interface WordCardProps {
   data: WordCardData;
+  intervals?: Record<string, string>; // New Prop: Forecasted intervals
   onRate: (rating: 'easy' | 'good' | 'hard' | 'forgot') => void;
 }
 
-const WordCard: React.FC<WordCardProps> = ({ data, onRate }) => {
+const WordCard: React.FC<WordCardProps> = ({ data, intervals, onRate }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loadingAudio, setLoadingAudio] = useState(false);
 
@@ -90,19 +91,16 @@ const WordCard: React.FC<WordCardProps> = ({ data, onRate }) => {
       }
     });
 
-    // Sort by start position
     segments.sort((a, b) => a.start - b.start);
 
     const finalElements: React.ReactNode[] = [];
     let lastIndex = 0;
 
     segments.forEach((seg, i) => {
-      // Add regular text before this segment
       if (seg.start > lastIndex) {
         finalElements.push(<span key={`text-${i}`}>{text.substring(lastIndex, seg.start)}</span>);
       }
       
-      // Ensure we don't overlap or go backwards
       if (seg.start < lastIndex) return;
 
       let borderColor = "border-primary-400";
@@ -141,107 +139,129 @@ const WordCard: React.FC<WordCardProps> = ({ data, onRate }) => {
 
   const details = data.details;
   if (!details) return (
-    <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl p-12 flex flex-col items-center justify-center space-y-4">
-      <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin"></div>
-      <p className="text-gray-500 font-medium">AI 正在编撰词卡详情...</p>
+    <div className="w-full max-w-xl mx-auto bg-white rounded-xl shadow-lg p-12 flex flex-col items-center justify-center space-y-4">
+      <div className="w-10 h-10 border-4 border-primary-100 border-t-primary-500 rounded-full animate-spin"></div>
+      <p className="text-gray-500 font-medium">AI 正在编撰...</p>
     </div>
   );
 
   return (
-    <div className="w-full max-w-xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col min-h-[550px] overflow-hidden animate-flip-in">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-slate-50 to-white p-6 border-b border-gray-100">
-            <div className="flex justify-between items-start mb-4">
+    <div className="w-full max-w-xl mx-auto bg-white rounded-xl shadow-xl border border-gray-100 flex flex-col min-h-[500px] overflow-hidden animate-flip-in">
+        {/* Header - 压缩内边距 */}
+        <div className="bg-gradient-to-br from-slate-50 to-white px-5 py-3 border-b border-gray-100">
+            <div className="flex justify-between items-start">
                 <h2 className="text-4xl font-bold text-gray-800 tracking-tight">{data.word}</h2>
-                <div className="flex flex-col items-end gap-1.5">
-                   <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-bold uppercase tracking-widest">Lv.{data.level}</span>
-                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${data.status === WordStatus.NEW ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
-                      {data.status === WordStatus.NEW ? '新发现' : '记忆中'}
+                <div className="flex flex-col items-end gap-1">
+                   <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded text-[10px] font-bold uppercase tracking-widest">Lv.{data.level}</span>
+                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${data.status === WordStatus.NEW ? 'bg-blue-50 text-blue-500' : 'bg-green-50 text-green-500'}`}>
+                      {data.status === WordStatus.NEW ? '新发现' : '复习中'}
                    </span>
                 </div>
             </div>
             
-            <div className="flex gap-3">
-                <button onClick={() => playAudio(data.word, 'US')} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-gray-200 shadow-sm text-xs font-semibold text-gray-600 hover:text-primary-600 hover:border-primary-200 transition-all active:scale-95">
-                  <Volume2 size={14} className="text-primary-500"/> 
+            <div className="flex gap-3 mt-2">
+                <button onClick={() => playAudio(data.word, 'US')} className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-gray-100 shadow-sm text-xs font-semibold text-gray-500 hover:text-primary-600 hover:border-primary-200 transition-all active:scale-95">
+                  <Volume2 size={14} className="text-primary-400"/> 
                   <span>美 /{details.ipa.us}/</span>
                 </button>
-                <button onClick={() => playAudio(data.word, 'UK')} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-gray-200 shadow-sm text-xs font-semibold text-gray-600 hover:text-purple-600 hover:border-purple-200 transition-all active:scale-95">
-                  <Volume2 size={14} className="text-purple-500"/> 
+                <button onClick={() => playAudio(data.word, 'UK')} className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-gray-100 shadow-sm text-xs font-semibold text-gray-500 hover:text-purple-600 hover:border-purple-200 transition-all active:scale-95">
+                  <Volume2 size={14} className="text-purple-400"/> 
                   <span>英 /{details.ipa.uk}/</span>
                 </button>
             </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-grow p-6 space-y-6 overflow-y-auto custom-scrollbar">
+        {/* Morphological Variations (Inflections) */}
+        {details.inflections && Object.values(details.inflections).some(Boolean) && (
+            <div className="px-5 pt-3 pb-1 flex flex-wrap gap-2">
+                {details.inflections.plural && (
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500">
+                        <span className="font-bold text-slate-400">复数</span> {details.inflections.plural}
+                    </div>
+                )}
+                {details.inflections.thirdPersonSingular && (
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500">
+                        <span className="font-bold text-slate-400">三单</span> {details.inflections.thirdPersonSingular}
+                    </div>
+                )}
+                {details.inflections.pastTense && (
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500">
+                        <span className="font-bold text-slate-400">过去式</span> {details.inflections.pastTense}
+                    </div>
+                )}
+                {details.inflections.pastParticiple && (
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500">
+                        <span className="font-bold text-slate-400">过去分词</span> {details.inflections.pastParticiple}
+                    </div>
+                )}
+                 {details.inflections.presentParticiple && (
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-500">
+                        <span className="font-bold text-slate-400">现在分词</span> {details.inflections.presentParticiple}
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* Content - 减少分段间距 */}
+        <div className="flex-grow px-5 py-3 space-y-4 overflow-y-auto custom-scrollbar">
             {/* Definitions */}
             <section>
-                <div className="flex items-center gap-2 mb-3">
-                   <div className="p-1 bg-primary-100 text-primary-600 rounded">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                   <div className="p-1 bg-primary-50 text-primary-500 rounded">
                       <Book size={14} />
                    </div>
-                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">核心释义</h3>
+                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">释义</h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-2">
                     {details.definitions.map((def, idx) => (
-                        <div key={idx} className="relative pl-4 border-l-2 border-primary-100">
+                        <div key={idx} className="relative pl-3 border-l-2 border-primary-100">
                              <div className="flex items-baseline gap-2">
                                 <span className="text-[10px] font-black text-primary-400 italic uppercase">{def.pos}</span>
-                                <span className="text-sm text-gray-800">{def.meaning}</span>
+                                <span className="text-base text-gray-700">{def.meaning}</span>
                              </div>
-                             <p className="text-xs text-gray-500 mt-0.5">{def.translation}</p>
+                             <p className="text-sm text-gray-500 mt-0.5">{def.translation}</p>
                         </div>
                     ))}
                 </div>
             </section>
 
             {/* Example Sentences */}
-            <section className="bg-slate-50 rounded-2xl p-5 border border-slate-100 relative overflow-hidden">
-                <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center gap-2">
-                       <div className="p-1 bg-amber-100 text-amber-600 rounded">
-                          <BookOpen size={14} />
-                       </div>
-                       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">地道例句</h3>
+            <section className="bg-slate-50/50 rounded-xl p-3 border border-slate-100 relative">
+                <div className="flex items-center gap-1.5 mb-2">
+                    <div className="p-1 bg-amber-50 text-amber-500 rounded">
+                        <BookOpen size={14} />
                     </div>
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">例句</h3>
                 </div>
-                <ul className="space-y-5">
+                <ul className="space-y-3">
                     {details.sentences.map((sent, idx) => (
-                        <li key={idx} className="group">
+                        <li key={idx}>
                             <div className="flex flex-col">
                                 {renderSentenceWithHighlights(sent.en, sent.highlights)}
-                                <p className="text-gray-500 text-xs mt-2 italic font-medium">{sent.cn}</p>
+                                <p className="text-gray-500 text-xs mt-1 italic">{sent.cn}</p>
                             </div>
                         </li>
                     ))}
                 </ul>
-                {/* Legend for highlights */}
-                <div className="mt-4 pt-4 border-t border-slate-200 flex flex-wrap gap-4 text-[10px] font-bold text-gray-400">
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-0.5 bg-primary-400"></span> 常用搭配
+                <div className="mt-3 pt-2 border-t border-slate-200 flex flex-wrap gap-4 text-[10px] font-bold text-gray-400">
+                    <div className="flex items-center gap-1">
+                        <span className="w-2.5 h-0.5 bg-primary-400"></span> 搭配
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-0.5 bg-amber-400"></span> 习语/惯用
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-0.5 bg-pink-400"></span> 俚语/非正式
-                    </div>
-                    <div className="flex items-center gap-1.5 italic">
-                        <span className="w-2.5 h-0.5 border-t border-dashed border-gray-400"></span> 结构连接
+                    <div className="flex items-center gap-1">
+                        <span className="w-2.5 h-0.5 bg-amber-400"></span> 习语
                     </div>
                 </div>
             </section>
             
             <div className="grid grid-cols-2 gap-4">
                 {details.collocations && details.collocations.length > 0 && (
-                    <div className="space-y-2">
-                        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                           <Zap size={12} className="text-yellow-500"/> 搭配扩展
+                    <div className="space-y-1.5">
+                        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                           <Zap size={12} className="text-yellow-400"/> 搭配词
                         </h3>
                         <div className="flex flex-wrap gap-1.5">
                             {details.collocations.map((col, idx) => (
-                                <span key={idx} className="px-2 py-0.5 bg-yellow-50 text-yellow-700 border border-yellow-100 rounded text-[10px] font-medium">
+                                <span key={idx} className="px-2 py-0.5 bg-yellow-50 text-yellow-600 border border-yellow-100 rounded text-[10px] font-medium">
                                     {col}
                                 </span>
                             ))}
@@ -249,11 +269,11 @@ const WordCard: React.FC<WordCardProps> = ({ data, onRate }) => {
                     </div>
                 )}
                 {details.etymology && (
-                    <div className="space-y-2">
-                        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                           <Clock size={12} className="text-orange-400"/> 词源故事
+                    <div className="space-y-1.5">
+                        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                           <Clock size={12} className="text-orange-400"/> 词源
                         </h3>
-                        <p className="text-[10px] text-gray-500 leading-relaxed bg-orange-50/50 p-2 rounded-lg border border-orange-100/50">
+                        <p className="text-[11px] text-gray-500 leading-normal bg-orange-50/40 p-2 rounded-lg border border-orange-100/50">
                             {details.etymology}
                         </p>
                     </div>
@@ -261,22 +281,26 @@ const WordCard: React.FC<WordCardProps> = ({ data, onRate }) => {
             </div>
         </div>
 
-        {/* Action Bar */}
-        <div className="p-4 border-t border-gray-100 bg-slate-50/50">
+        {/* Action Bar - 压缩内边距 */}
+        <div className="px-4 py-3 border-t border-gray-100 bg-slate-50/50">
             <div className="grid grid-cols-4 gap-3">
-                 <button onClick={() => onRate('forgot')} className="flex flex-col items-center justify-center gap-1 py-3 rounded-xl bg-white border border-gray-200 hover:border-red-200 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all active:scale-95 group">
+                 <button onClick={() => onRate('forgot')} className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-white border border-gray-200 hover:border-red-200 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all active:scale-95 group relative">
+                   {intervals && <span className="absolute -top-3 text-[10px] font-bold text-red-400">{intervals['forgot']}</span>}
                    <RotateCcw size={18} className="group-hover:rotate-[-45deg] transition-transform"/>
                    <span className="text-[10px] font-bold uppercase tracking-tighter">完全不认识</span>
                  </button>
-                 <button onClick={() => onRate('hard')} className="flex flex-col items-center justify-center gap-1 py-3 rounded-xl bg-white border border-gray-200 hover:border-orange-200 hover:bg-orange-50 text-gray-400 hover:text-orange-500 transition-all active:scale-95">
+                 <button onClick={() => onRate('hard')} className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-white border border-gray-200 hover:border-orange-200 hover:bg-orange-50 text-gray-400 hover:text-orange-500 transition-all active:scale-95 relative">
+                   {intervals && <span className="absolute -top-3 text-[10px] font-bold text-orange-400">{intervals['hard']}</span>}
                    <span className="text-xl">😬</span>
                    <span className="text-[10px] font-bold uppercase tracking-tighter">模棱两可</span>
                  </button>
-                 <button onClick={() => onRate('good')} className="flex flex-col items-center justify-center gap-1 py-3 rounded-xl bg-white border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-gray-400 hover:text-primary-500 transition-all active:scale-95">
+                 <button onClick={() => onRate('good')} className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-white border border-gray-200 hover:border-primary-200 hover:bg-primary-50 text-gray-400 hover:text-primary-500 transition-all active:scale-95 relative">
+                   {intervals && <span className="absolute -top-3 text-[10px] font-bold text-primary-400">{intervals['good']}</span>}
                    <span className="text-xl">🙂</span>
                    <span className="text-[10px] font-bold uppercase tracking-tighter">有点印象</span>
                  </button>
-                 <button onClick={() => onRate('easy')} className="flex flex-col items-center justify-center gap-1 py-3 rounded-xl bg-white border border-gray-200 hover:border-green-200 hover:bg-green-50 text-gray-400 hover:text-green-500 transition-all active:scale-95">
+                 <button onClick={() => onRate('easy')} className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-white border border-gray-200 hover:border-green-200 hover:bg-green-50 text-gray-400 hover:text-green-500 transition-all active:scale-95 relative">
+                   {intervals && <span className="absolute -top-3 text-[10px] font-bold text-green-400">{intervals['easy']}</span>}
                    <span className="text-xl">🤩</span>
                    <span className="text-[10px] font-bold uppercase tracking-tighter">信手拈来</span>
                  </button>
